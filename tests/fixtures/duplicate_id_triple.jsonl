@@ -1,0 +1,3 @@
+{"id": "case_001", "input": {"text": "a"}, "expected": {"label": "x"}}
+{"id": "case_001", "input": {"text": "b"}, "expected": {"label": "y"}}
+{"id": "case_001", "input": {"text": "c"}, "expected": {"label": "z"}}

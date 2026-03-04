@@ -1,0 +1,6 @@
+{"id": "case_001", "input": {"text": "hello"}, "expected": {"label": "greeting"}}
+this is not json at all
+{"id": "case_002", "input": {"text": "bye"}, "expected": {"label": "farewell"}}
+{"input": {"text": "hi"}, "expected": {"label": "greeting"}}
+{"id": "case_003", "input": {"text": "ok"}, "expected": {"label": "farewell"}}
+{"id": "case_004", "input": {"text": "yes"}, "expected": "wrong type"}
