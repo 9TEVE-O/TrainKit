@@ -227,7 +227,7 @@ trainkit diff -2 -1
 ```
 
 > **Rejected syntax:** Natural-language aliases such as `latest` or `previous`
-> are not supported. Use negative indices (`-1` for last, `--2` for second-to-last).
+> are not supported. Use negative indices (`-1` for last, `-2` for second-to-last).
 
 ### Diff output
 
