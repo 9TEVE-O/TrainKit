@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "trainkit"
+version = "0.1.0.dev0"
+description = "A lightweight CLI tool for reproducible ML model evaluation"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Subzteveø" }]
+requires-python = ">=3.9"
+keywords = ["machine-learning", "evaluation", "cli", "metrics"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "click>=8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+
+[project.scripts]
+trainkit = "trainkit.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/9TEVE-O/TrainKit-"
+Repository = "https://github.com/9TEVE-O/TrainKit-"
+"Bug Tracker" = "https://github.com/9TEVE-O/TrainKit-/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["trainkit"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
