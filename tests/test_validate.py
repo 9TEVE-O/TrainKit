@@ -31,6 +31,7 @@ def test_criterion1_file_not_found():
     assert "File not found" in result.output
 
 
+@pytest.mark.skipif(os.name == "nt", reason="chmod-based permission test not reliable on Windows")
 def test_criterion1_unreadable_file():
     """Unreadable file (no permissions) exits with code 2."""
     with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as f:
@@ -45,9 +46,20 @@ def test_criterion1_unreadable_file():
         os.unlink(path)
 
 
-# ---------------------------------------------------------------------------
-# Criterion 2 — File is not empty
-# ---------------------------------------------------------------------------
+def test_criterion1_non_utf8_file():
+    """Non-UTF-8 file exits with code 2."""
+    with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as f:
+        f.write(b"\xff\xfe invalid utf-8\n")
+        path = f.name
+    try:
+        result = run_validate(path)
+        assert result.exit_code == 2
+        assert "UTF-8" in result.output or "Cannot read" in result.output
+    finally:
+        os.unlink(path)
+
+
+
 
 
 def test_criterion2_empty_file():

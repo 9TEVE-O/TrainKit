@@ -44,6 +44,11 @@ def validate_jsonl(file_path: str) -> int:
     except PermissionError:
         click.echo(f"✗ Permission denied: {file_path}")
         return 2
+    except UnicodeDecodeError:
+        click.echo(
+            f"✗ Cannot read file {file_path}: file is not valid UTF-8 or contains invalid characters."
+        )
+        return 2
     except OSError as e:
         click.echo(f"✗ Cannot read file {file_path}: {e}")
         return 2

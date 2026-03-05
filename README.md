@@ -42,13 +42,16 @@ Fields outside this set generate warnings (exit code 0 is still returned if no e
 
 **Error limit**
 
-After collecting 50 errors the validator stops processing, appends a truncation
-notice showing how many additional errors were not reported, and exits with
-code 1.
+The validator reports at most 50 individual errors. After collecting 50 errors
+it continues validating the rest of the file and counting additional errors,
+but does not add more per-error messages to the output. At the end it appends
+a truncation notice indicating that only the first 50 errors are shown and
+how many additional errors were found, and exits with code 1.
 
-*Product decision (March 2026):* 50 is the starting default. This value may be
-changed before v1.0 without a schema amendment. If a different limit is needed,
-update `MAX_ERRORS` in `src/trainkit/validate.py` and record the change here.
+*Product decision (March 2026):* 50 is the starting default cap on reported
+errors. This value may be changed before v1.0 without a schema amendment. If a
+different limit is needed, update `MAX_ERRORS` in `src/trainkit/validate.py`
+and record the change here.
 
 **Performance**
 
