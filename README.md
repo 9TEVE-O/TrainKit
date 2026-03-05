@@ -207,7 +207,7 @@ trainkit diff -2 -1
   "base_run": "20260301T100000Z_xyz99999",
   "compare_run": "20260304T142300Z_abc12345",
   "deltas": {
-    "accuracy": {"base": 0.901, "compare": 0.923, "delta": +0.022},
+    "accuracy": {"base": 0.901, "compare": 0.923, "delta": 0.022},
     "loss":     {"base": 0.289, "compare": 0.241, "delta": -0.048}
   }
 }
