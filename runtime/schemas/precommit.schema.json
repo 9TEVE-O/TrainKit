@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "precommit.schema.json",
+  "title": "PrecommitRecord",
+  "description": "A binding promise that is written to the event log before any external side effect.",
+  "type": "object",
+  "required": ["runId", "description", "timestamp"],
+  "additionalProperties": false,
+  "properties": {
+    "runId": { "type": "string" },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable label for the side effect about to occur."
+    },
+    "timestamp": { "type": "string", "format": "date-time" }
+  }
+}

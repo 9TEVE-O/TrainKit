@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "audit-record.schema.json",
+  "title": "AuditRecord",
+  "description": "A structured record appended to the event log after a significant action.",
+  "type": "object",
+  "required": ["runId", "recordType", "data", "timestamp"],
+  "additionalProperties": false,
+  "properties": {
+    "runId": { "type": "string" },
+    "recordType": { "type": "string", "minLength": 1 },
+    "data": {},
+    "timestamp": { "type": "string", "format": "date-time" }
+  }
+}

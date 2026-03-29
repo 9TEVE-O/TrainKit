@@ -23,6 +23,12 @@ from trainkit.artifacts import (
 )
 from trainkit.diff import diff_runs
 from trainkit.runner import EXIT_ERROR, run_evaluation
+from trainkit.runtime_bridge import (
+    emit_precommit,
+    emit_run_completed,
+    emit_run_failed,
+    emit_run_started,
+)
 
 
 @click.group()
@@ -77,6 +83,13 @@ def run_cmd(
                 f"Expected METRIC:VALUE, got {spec!r}", param_hint="--threshold"
             )
 
+    seed = script or command or ""
+    pre_start = datetime.now(tz=timezone.utc)
+    run_id = make_run_id(pre_start, seed)
+    base = Path(output_dir)
+
+    emit_run_started(run_id, script=script, command=command)
+
     try:
         (
             exit_code,
@@ -98,9 +111,10 @@ def run_cmd(
         click.echo(f"Error: {exc}", err=True)
         sys.exit(EXIT_ERROR)
 
-    seed = script or command or ""
-    run_id = make_run_id(start_time, seed)
-    base = Path(output_dir)
+    if exit_code == EXIT_ERROR and not results:
+        emit_run_failed(run_id, reason="Evaluation script exited with non-zero status")
+    else:
+        emit_run_completed(run_id, exit_code=exit_code, duration_seconds=duration)
 
     summary = build_summary(
         run_id=run_id,
@@ -113,6 +127,8 @@ def run_cmd(
         results=results,
         warnings=warnings,
     )
+
+    emit_precommit(run_id, description="write run artefacts to disk")
 
     directory = write_run(
         run_id=run_id,
