@@ -86,7 +86,7 @@ def write_run(
         The run directory that was created.
     """
     directory = run_dir(run_id, base)
-    directory.mkdir(parents=True, exist_ok=True)
+    directory.mkdir(parents=True, exist_ok=False)
 
     results_path = directory / "results.jsonl"
     with results_path.open("w", encoding="utf-8") as fh:
