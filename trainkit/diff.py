@@ -2,8 +2,8 @@
 
 Compares two runs and reports metric deltas. Run selection uses
 integer indices (0-based from oldest, negative from newest) or
-full ISO 8601 timestamps. Natural-language aliases (``latest``,
-``previous``) are explicitly unsupported.
+timestamp prefixes matching run IDs. Natural-language aliases
+(``latest``, ``previous``) are explicitly unsupported.
 """
 from __future__ import annotations
 
