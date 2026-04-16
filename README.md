@@ -150,16 +150,12 @@ Results are stored in two forms:
 
 ### Per-sample JSONL file (`results.jsonl`)
 
-One JSON object per line, one line per sample. Fields match the evaluation data format above, plus:
+One JSON object per line, one line per sample. Each object is exactly one record emitted by the evaluation script and matches the evaluation data format described above (TrainKit does not inject additional fields into these records).
 
-| Field | Description |
-|-------|-------------|
-| `run_id` | Unique identifier for the run (see Artefact Directory) |
-| `timestamp` | ISO 8601 UTC timestamp of the sample capture |
 
 ### Run summary file (`summary.json`)
 
-One JSON object containing aggregate statistics for the run:
+One JSON object containing aggregate statistics and metadata for the run:
 
 ```json
 {
