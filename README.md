@@ -181,14 +181,14 @@ One JSON object containing aggregate statistics and metadata for the run:
 
 ### Run selection
 
-Runs are selected by **index** (integer, 0-based from oldest) or **full ISO 8601 timestamp**.
+Runs are selected by **index** (integer, 0-based from oldest) or by **run ID prefix** (the compact timestamp prefix of the run directory name, for example `20260301T100000Z`).
 
 ```bash
 # Compare run at index 0 (oldest) with run at index 1
 trainkit diff 0 1
 
-# Compare two runs by full timestamp
-trainkit diff 2026-03-01T10:00:00Z 2026-03-04T14:23:00Z
+# Compare two runs by compact timestamp / run ID prefix
+trainkit diff 20260301T100000Z 20260304T142300Z
 
 # Compare second-to-last with last run
 trainkit diff -2 -1
