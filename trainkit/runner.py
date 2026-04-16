@@ -124,6 +124,22 @@ def run_evaluation(
     for lineno, line in enumerate(stdout_text.splitlines(), start=1):
         line = line.strip()
         if not line:
+            # Treat empty lines as parse errors to enforce "one JSON object per line"
+            exc = ParseError("Empty line")
+            msg = f"Line {lineno}: {exc}"
+            if strict:
+                warnings.append(msg)
+                return (
+                    EXIT_ERROR,
+                    results,
+                    stdout_text,
+                    stderr_text,
+                    warnings,
+                    start_time,
+                    duration,
+                    model_hash,
+                )
+            warnings.append(f"WARNING — {msg} (line skipped)")
             continue
         try:
             row = parse_result_line(line)
