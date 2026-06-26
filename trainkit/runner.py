@@ -100,6 +100,7 @@ def run_evaluation(
         cmd,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
 
     duration = time.monotonic() - t0
