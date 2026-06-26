@@ -88,7 +88,8 @@ def run_evaluation(
         model_hash = hash_script(script_path)
         cmd: list[str] = [sys.executable, str(script_path)]
         if args:
-            cmd.extend(args.split())
+            import shlex
+            cmd.extend(shlex.split(args))
     else:
         cmd = ["sh", "-c", command]  # type: ignore[list-item]
 
