@@ -27,6 +27,13 @@ coverage.xml
 # TrainKit artefacts
 .trainkit/
 
+# Runtime Control Contract v1 event log
+.runtime/
+
+# TypeScript / Node
+node_modules/
+dist/
+
 # IDE
 .vscode/
 .idea/

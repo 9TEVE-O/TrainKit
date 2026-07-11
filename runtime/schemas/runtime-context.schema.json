@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "runtime-context.schema.json",
+  "title": "RuntimeContext",
+  "description": "Serialisable snapshot of the runtime kernel state.",
+  "type": "object",
+  "required": [
+    "status",
+    "runId",
+    "objectiveSatisfied",
+    "pendingActions",
+    "materialAmbiguity",
+    "startedAt"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "status": { "$ref": "run-status.schema.json" },
+    "runId": { "type": ["string", "null"] },
+    "objectiveSatisfied": { "type": "boolean" },
+    "pendingActions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "materialAmbiguity": { "type": "boolean" },
+    "startedAt": { "type": ["string", "null"], "format": "date-time" }
+  }
+}

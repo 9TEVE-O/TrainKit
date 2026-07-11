@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "event-rest-exited.schema.json",
+  "title": "RestExitedPayload",
+  "description": "Payload emitted when the runtime leaves the REST state.",
+  "type": "object",
+  "required": ["runId", "nextState", "reason"],
+  "additionalProperties": false,
+  "properties": {
+    "runId": { "type": "string" },
+    "nextState": {
+      "type": "string",
+      "enum": ["IDLE", "RUNNING", "ERROR"],
+      "description": "The state being transitioned to after leaving REST."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable reason for exiting REST."
+    }
+  }
+}

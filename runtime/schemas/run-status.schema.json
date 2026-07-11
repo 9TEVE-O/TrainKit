@@ -1,0 +1,8 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "run-status.schema.json",
+  "title": "RunStatus",
+  "description": "State machine states for a TrainKit runtime context.",
+  "type": "string",
+  "enum": ["IDLE", "RUNNING", "REST", "ERROR"]
+}
