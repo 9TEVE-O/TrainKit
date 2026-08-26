@@ -1,0 +1,2 @@
+{"id": "case_001", "input": {"text": "hello"}, "expected": {"label": "greeting"}}
+{"id": "case_001", "input": {"text": "bye"}, "expected": {"label": "farewell"}}

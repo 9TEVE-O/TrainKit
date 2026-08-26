@@ -23,6 +23,7 @@ from trainkit.artifacts import (
 )
 from trainkit.diff import diff_runs
 from trainkit.runner import EXIT_ERROR, run_evaluation
+from trainkit.validate import ERROR_LIMIT_DEFAULT, validate_jsonl_content
 from trainkit.runtime_bridge import (
     emit_precommit,
     emit_run_completed,
@@ -286,6 +287,65 @@ def clean_cmd(
 
     shutil.rmtree(run_dir(run_id, base))
     click.echo(f"Removed: {run_id}")
+
+
+# ---------------------------------------------------------------------------
+# trainkit validate
+# ---------------------------------------------------------------------------
+
+@main.command("validate")
+@click.argument("path", type=click.Path(path_type=Path, readable=False))
+@click.option(
+    "--error-limit",
+    type=int,
+    default=ERROR_LIMIT_DEFAULT,
+    show_default=True,
+    help="Maximum number of individual errors to report.",
+)
+def validate_cmd(path: Path, error_limit: int) -> None:
+    """Validate an evaluation set JSONL file against TrainKit schema rules."""
+    # readable=False above keeps Click from rejecting the path itself, so
+    # permission errors surface here with our own message and exit code.
+    # Single read attempt; all file errors surface here with exit code 2.
+    try:
+        content = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        click.echo(f"✗ File not found: {path}")
+        raise SystemExit(EXIT_ERROR)
+    except PermissionError:
+        click.echo(f"✗ Cannot read file: {path} (permission denied)")
+        raise SystemExit(EXIT_ERROR)
+    except UnicodeDecodeError:
+        click.echo(f"✗ Cannot read file: {path} (not valid UTF-8)")
+        raise SystemExit(EXIT_ERROR)
+    except OSError as exc:
+        click.echo(f"✗ Cannot read file: {path} ({exc})")
+        raise SystemExit(EXIT_ERROR)
+
+    result = validate_jsonl_content(content, error_limit=error_limit)
+
+    # Output order: warnings before errors.
+    for warning in result.warnings:
+        click.echo(warning.message)
+    for error in result.errors:
+        click.echo(error.message)
+
+    if result.truncated:
+        click.echo(
+            f"✗ {error_limit} errors reported. "
+            f"{result.suppressed_error_count} additional errors not shown. "
+            f"Fix the listed errors first then re-run."
+        )
+        raise SystemExit(1)
+
+    if result.errors:
+        raise SystemExit(1)
+
+    if result.warnings:
+        click.echo(f"⚠ {len(result.warnings)} warning(s). See above.")
+
+    click.echo(f"✓ {result.case_count} cases validated. No errors.")
+    raise SystemExit(0)
 
 
 # ---------------------------------------------------------------------------
