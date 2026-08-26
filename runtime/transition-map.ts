@@ -16,7 +16,7 @@ export type TransitionKey = `${RunStatus}:${EventType}`;
  * cause state changes. `PRECOMMIT` and `AUDIT_RECORDED` are orthogonal
  * side-effect markers and do not change state.
  */
-export const TRANSITION_MAP: Readonly<Record<TransitionKey, RunStatus>> = {
+export const TRANSITION_MAP: Partial<Readonly<Record<TransitionKey, RunStatus>>> = {
   "IDLE:RUN_STARTED": "RUNNING",
   "RUNNING:RUN_COMPLETED": "REST",
   "RUNNING:RUN_FAILED": "ERROR",
@@ -33,5 +33,5 @@ export function resolveTransition(
   event: EventType
 ): RunStatus | null {
   const key: TransitionKey = `${current}:${event}`;
-  return (TRANSITION_MAP as Record<string, RunStatus>)[key] ?? null;
+  return TRANSITION_MAP[key] ?? null;
 }

@@ -10,6 +10,8 @@ import json
 import math
 from typing import Any
 
+from trainkit._jsontypes import json_type_name
+
 # Metric name → (min_value, max_value) or None for unbounded
 _BUILTIN_METRICS: dict[str, tuple[float | None, float | None]] = {
     "accuracy":  (0.0, 1.0),
@@ -78,7 +80,7 @@ def parse_result_line(line: str) -> dict[str, Any]:
         raise ParseError("Field 'metric' must be a non-empty string")
     if not isinstance(obj["value"], (int, float)) or isinstance(obj["value"], bool):
         raise ParseError(
-            f"Field 'value' must be a number, got {type(obj['value']).__name__!r}"
+            f"Field 'value' must be a number, got {json_type_name(obj['value'])}"
         )
     # json.loads accepts NaN/Infinity as floats. They compare false against
     # every bound, so they would slip past range checks and threshold gates,

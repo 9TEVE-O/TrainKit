@@ -4,26 +4,11 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
+from trainkit._jsontypes import json_type_name
+
 ERROR_LIMIT_DEFAULT = 50
 
 KNOWN_FIELDS = {"id", "input", "expected", "description", "tags", "metadata"}
-
-
-def json_type_name(value: Any) -> str:
-    """Return JSON type name, not Python type name."""
-    if value is None:
-        return "null"
-    if isinstance(value, bool):
-        return "boolean"
-    if isinstance(value, (int, float)):
-        return "number"
-    if isinstance(value, str):
-        return "string"
-    if isinstance(value, list):
-        return "array"
-    if isinstance(value, dict):
-        return "object"
-    return type(value).__name__
 
 
 @dataclass

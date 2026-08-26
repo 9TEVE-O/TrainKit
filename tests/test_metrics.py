@@ -35,6 +35,24 @@ class TestParseResultLine:
         with pytest.raises(ParseError, match="JSON object"):
             parse_result_line("[1, 2, 3]")
 
+    @pytest.mark.parametrize(
+        "literal, json_name",
+        [
+            ('"0.9"', "string"),
+            ("true", "boolean"),
+            ("null", "null"),
+            ("{}", "object"),
+            ("[]", "array"),
+        ],
+    )
+    def test_value_type_error_names_the_json_type(self, literal, json_name):
+        # Errors must name JSON types, not Python ones ('string' not 'str',
+        # 'boolean' not 'bool', 'object' not 'dict').
+        with pytest.raises(ParseError, match=f"got {json_name}$"):
+            parse_result_line(
+                '{"id": "s1", "metric": "accuracy", "value": %s}' % literal
+            )
+
     @pytest.mark.parametrize("literal", ["NaN", "Infinity", "-Infinity"])
     def test_non_finite_value_rejected(self, literal):
         # json.loads accepts these as floats; they must not reach results,

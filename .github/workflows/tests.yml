@@ -67,3 +67,27 @@ jobs:
 
       - name: Run runtime kernel tests
         run: npm test
+
+  typecheck:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned to the lowest Node the vitest matrix covers. tsc reads its view
+      # of the standard library from @types/node rather than from the running
+      # interpreter, so this job is not repeated across the matrix: both legs
+      # would check the identical type surface. What keeps the check honest is
+      # @types/node tracking the minimum supported major, so an API newer than
+      # that is a compile error rather than a runtime failure on Node 20.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck the runtime kernel
+        run: npm run typecheck
