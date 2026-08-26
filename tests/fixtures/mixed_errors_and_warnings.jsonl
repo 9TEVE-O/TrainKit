@@ -1,0 +1,2 @@
+{"id":"case_001","input":{"x":1},"expected":{"y":2},"source":"external"}
+{"id":"case_002","input":"not_an_object","expected":{"y":4}}

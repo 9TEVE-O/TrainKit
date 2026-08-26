@@ -1,0 +1,5 @@
+{"id":"case_001","input":{"x":1},"expected":{"y":2}}
+{"id": "case_002", "input": {"x": 2}, "expected": {"y": 4}
+[{"id":"case_003"}]
+{"input":{"x":4},"expected":{"y":8}}
+{"id":"case_005","input":{"x":5},"expected":{"y":10}}
