@@ -24,13 +24,13 @@ from trainkit.artifacts import (
 )
 from trainkit.diff import diff_runs
 from trainkit.runner import EXIT_ERROR, run_evaluation
-from trainkit.validate import ERROR_LIMIT_DEFAULT, validate_jsonl_content
 from trainkit.runtime_bridge import (
     emit_precommit,
     emit_run_completed,
     emit_run_failed,
     emit_run_started,
 )
+from trainkit.validate import ERROR_LIMIT_DEFAULT, validate_jsonl_content
 
 
 @click.group()
