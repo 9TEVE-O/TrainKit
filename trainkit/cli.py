@@ -56,6 +56,12 @@ def main() -> None:
 )
 @click.option("--strict", is_flag=True, default=False, help="Fail on any parse warning.")
 @click.option(
+    "--timeout",
+    type=float,
+    default=None,
+    help="Kill the evaluation and exit 2 if it runs longer than this many seconds.",
+)
+@click.option(
     "--output-dir",
     default=str(DEFAULT_ARTEFACT_DIR),
     show_default=True,
@@ -67,6 +73,7 @@ def run_cmd(
     args: Optional[str],
     thresholds: tuple[str, ...],
     strict: bool,
+    timeout: Optional[float],
     output_dir: str,
 ) -> None:
     """Execute an evaluation script and store results."""
@@ -108,8 +115,9 @@ def run_cmd(
             args=args,
             strict=strict,
             thresholds=parsed_thresholds,
+            timeout=timeout,
         )
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, ValueError) as exc:
         discard_run_id(run_id, base)
         click.echo(f"Error: {exc}", err=True)
         sys.exit(EXIT_ERROR)

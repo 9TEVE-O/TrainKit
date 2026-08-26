@@ -7,6 +7,7 @@ Supports two modes:
 from __future__ import annotations
 
 import hashlib
+import shlex
 import subprocess
 import sys
 import time
@@ -20,6 +21,15 @@ from trainkit.metrics import MissingFieldError, ParseError, parse_result_line, v
 EXIT_OK = 0
 EXIT_THRESHOLD = 1
 EXIT_ERROR = 2
+
+# subprocess.run(..., text=True) decodes captured stdout/stderr with this
+# codec. Evaluation scripts are arbitrary user code; a byte sequence that
+# is not valid UTF-8 must not crash the runner with an uncaught
+# UnicodeDecodeError, since that currently exits 1 — the same code as a
+# threshold breach — making a tool crash indistinguishable from a failed
+# gate.
+_OUTPUT_ENCODING = "utf-8"
+_OUTPUT_ERRORS = "replace"
 
 
 def hash_script(script_path: Path) -> str:
@@ -46,6 +56,7 @@ def run_evaluation(
     args: str | None = None,
     strict: bool = False,
     thresholds: dict[str, float] | None = None,
+    timeout: float | None = None,
 ) -> tuple[int, list[dict[str, Any]], str, str, list[str], datetime, float, str | None]:
     """Execute an evaluation script or command and capture its output.
 
@@ -57,11 +68,19 @@ def run_evaluation(
         Shell command string (command mode).
     args:
         Additional arguments appended to the script command (script mode only).
+        Parsed with ``shlex.split`` so a quoted argument (e.g. a path
+        containing a space) reaches the script as one argument rather than
+        being split on every whitespace character.
     strict:
         If ``True``, any parse warning causes the run to fail with exit code 2.
     thresholds:
         Mapping of metric name to minimum acceptable mean value. If any
         metric mean falls below its threshold, the run exits with code 1.
+    timeout:
+        Maximum seconds to let the subprocess run. ``None`` (the default)
+        waits indefinitely. A run that exceeds the timeout is killed and
+        exits with code 2 rather than hanging the caller — typically a CI
+        job — until something else kills it.
 
     Returns
     -------
@@ -72,7 +91,9 @@ def run_evaluation(
     Raises
     ------
     ValueError
-        If neither ``script`` nor ``command`` is provided, or if both are.
+        If neither ``script`` nor ``command`` is provided, or if both are,
+        or if ``args`` is not valid shell-style syntax (e.g. an unbalanced
+        quote).
     """
     if script is None and command is None:
         raise ValueError("Either --script or --cmd must be provided")
@@ -88,25 +109,49 @@ def run_evaluation(
         model_hash = hash_script(script_path)
         cmd: list[str] = [sys.executable, str(script_path)]
         if args:
-            cmd.extend(args.split())
+            try:
+                cmd.extend(shlex.split(args))
+            except ValueError as exc:
+                raise ValueError(f"Could not parse --args {args!r}: {exc}") from exc
     else:
         cmd = ["sh", "-c", command]  # type: ignore[list-item]
 
     start_time = datetime.now(tz=timezone.utc)
     t0 = time.monotonic()
 
-    proc = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-    )
+    warnings: list[str] = []
+    results: list[dict[str, Any]] = []
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding=_OUTPUT_ENCODING,
+            errors=_OUTPUT_ERRORS,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        duration = time.monotonic() - t0
+        stdout_text = (exc.stdout or b"").decode(_OUTPUT_ENCODING, _OUTPUT_ERRORS) if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        stderr_text = (exc.stderr or b"").decode(_OUTPUT_ENCODING, _OUTPUT_ERRORS) if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        warnings.append(
+            f"Evaluation timed out after {timeout}s and was killed"
+        )
+        return (
+            EXIT_ERROR,
+            results,
+            stdout_text,
+            stderr_text,
+            warnings,
+            start_time,
+            duration,
+            model_hash,
+        )
 
     duration = time.monotonic() - t0
     stdout_text = proc.stdout
     stderr_text = proc.stderr
-
-    warnings: list[str] = []
-    results: list[dict[str, Any]] = []
 
     if proc.returncode != 0:
         return (
