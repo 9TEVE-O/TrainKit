@@ -98,6 +98,8 @@ trainkit run --script path/to/eval.py [--args "arg1 arg2"]
 - The script must exit with code `0` on success.
 - The script writes JSON lines to stdout; stderr is captured separately.
 - `model_hash` is computed as the SHA-256 digest of the script file. **Limitation:** this identifies the script, not the model weights. Weight hashing is deferred to a future version.
+- `--args` is parsed with shell-style quoting (`shlex`), so a quoted argument — for example a file path containing a space — reaches the script as a single argument rather than being split on every whitespace character.
+- `--timeout SECONDS` kills the subprocess and exits `2` if it runs longer than the given number of seconds. Omit it (the default) to wait indefinitely.
 
 ### Mode 2 — Command mode
 
@@ -109,6 +111,7 @@ trainkit run --cmd "python eval.py --config cfg.yaml"
 
 - Same stdout/stderr contract as script mode.
 - `model_hash` is `null` in command mode (no single file to hash).
+- The command string is passed to `sh -c` as-is. Only pass strings you control — this is equivalent to running the command yourself in a shell, with the same injection risk as any other `sh -c "$USER_INPUT"` call.
 
 ---
 
@@ -218,7 +221,7 @@ trainkit diff -2 -1
 |------|---------|
 | `0` | All metrics within threshold (or no threshold set); run succeeded |
 | `1` | One or more metrics breached the configured threshold, or a thresholded metric produced no values in this run |
-| `2` | Fatal error (script error, parse failure in strict mode, missing required field) |
+| `2` | Fatal error (script error, timeout, malformed `--args`, parse failure in strict mode, missing required field) |
 
 ### Threshold option
 
@@ -306,6 +309,9 @@ trainkit run --script eval.py --threshold accuracy:0.90 --threshold loss:0.30
 
 # Run with strict mode (fail on any parse warning)
 trainkit run --script eval.py --strict
+
+# Kill the evaluation and exit 2 if it runs longer than 300 seconds
+trainkit run --script eval.py --timeout 300
 
 # Show the latest run summary
 trainkit show
@@ -404,6 +410,16 @@ TrainKit occupies the niche of **zero-infrastructure, local-first, script-native
 - No model registry
 - No automatic hyperparameter logging
 - No dataset versioning
+
+---
+
+## Known Limitations (v0.1)
+
+These are current implementation limits, not roadmap items — each is a real gap a user can hit today.
+
+- **Evaluation output is fully buffered, not streamed.** `trainkit run` captures the subprocess's entire stdout/stderr in memory and shows nothing until the process exits. For a short script this is invisible; for a long-running evaluation you get no progress output while it runs, and very large stdout volume is held in memory rather than processed incrementally. Use `--timeout` to bound worst-case runtime in the meantime.
+- **`--cmd` runs through a shell.** The command string is passed to `sh -c` verbatim — appropriate for a local CLI tool operated by the person who wrote the command, but it must never be built from untrusted input (e.g. a value from a web form or another user's PR). Script mode (`--script`) does not have this exposure: the script path is executed directly, with no shell interposed.
+- **No parallelism.** One `trainkit run` invocation runs one subprocess to completion before returning. Running many evaluations concurrently means invoking the CLI multiple times yourself.
 
 ---
 

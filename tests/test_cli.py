@@ -172,6 +172,79 @@ class TestRunCommand:
         assert result.exit_code == 2
         assert [p.name for p in tmp_path.iterdir() if p.is_dir()] == []
 
+    def test_run_args_with_quoted_spaces(self, runner, tmp_path):
+        # args.split() would break a quoted argument containing a space into
+        # multiple argv entries. shlex.split must keep it as one.
+        script = tmp_path / "argv_echo.py"
+        script.write_text(
+            'import sys, json\n'
+            'print(json.dumps({"id": "a", "metric": "accuracy", "value": 0.5, '
+            '"split": repr(sys.argv[1:])}))\n'
+        )
+        result = runner.invoke(
+            main,
+            [
+                "run", "--script", str(script),
+                "--args", '--data "/data/my eval set.csv"',
+                "--output-dir", str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 0, result.stdout
+        run_dirs = [p for p in tmp_path.iterdir() if p.is_dir()]
+        row = json.loads((run_dirs[0] / "results.jsonl").read_text().splitlines()[0])
+        assert row["split"] == "['--data', '/data/my eval set.csv']"
+
+    def test_run_args_unbalanced_quote_exits_2(self, runner, eval_script, tmp_path):
+        # A malformed --args string must be a clean CLI error, not an
+        # uncaught ValueError from shlex.split.
+        result = runner.invoke(
+            main,
+            [
+                "run", "--script", str(eval_script),
+                "--args", '--data "unterminated',
+                "--output-dir", str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 2
+        assert "Could not parse --args" in result.stderr
+
+    def test_run_non_utf8_output_does_not_crash(self, runner, tmp_path):
+        # A script writing an invalid UTF-8 byte to stdout previously raised
+        # an uncaught UnicodeDecodeError, surfacing as exit 1 -- the same
+        # code as a threshold breach, making a tool crash indistinguishable
+        # from a failed gate.
+        script = tmp_path / "bad_encoding.py"
+        payload = (
+            b'{"id": "a", "metric": "accuracy", "value": 0.9, "note": "caf\xe9"}\n'
+        )
+        script.write_text(
+            "import sys\n"
+            f"sys.stdout.buffer.write({payload!r})\n"
+        )
+        result = runner.invoke(
+            main,
+            ["run", "--script", str(script), "--output-dir", str(tmp_path)],
+        )
+        assert result.exit_code == 0, result.stdout
+
+    def test_run_timeout_kills_hung_script(self, runner, tmp_path):
+        script = tmp_path / "hang.py"
+        script.write_text(
+            'import time\n'
+            'print(\'{"id": "a", "metric": "accuracy", "value": 0.5}\')\n'
+            'time.sleep(30)\n'
+        )
+        result = runner.invoke(
+            main,
+            [
+                "run", "--script", str(script),
+                "--timeout", "1",
+                "--output-dir", str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 2
+        assert "timed out" in result.stderr
+
     def test_run_bad_output_non_strict(self, runner, bad_output_script, tmp_path):
         result = runner.invoke(
             main,
