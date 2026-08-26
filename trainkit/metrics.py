@@ -7,6 +7,7 @@ errors (exit code 2, or skipped with a warning in non-strict mode).
 from __future__ import annotations
 
 import json
+import math
 from typing import Any
 
 # Metric name → (min_value, max_value) or None for unbounded
@@ -78,6 +79,13 @@ def parse_result_line(line: str) -> dict[str, Any]:
     if not isinstance(obj["value"], (int, float)) or isinstance(obj["value"], bool):
         raise ParseError(
             f"Field 'value' must be a number, got {type(obj['value']).__name__!r}"
+        )
+    # json.loads accepts NaN/Infinity as floats. They compare false against
+    # every bound, so they would slip past range checks and threshold gates,
+    # and json.dump would then write non-standard JSON into summary.json.
+    if not math.isfinite(obj["value"]):
+        raise ParseError(
+            f"Field 'value' must be a finite number, got {obj['value']}"
         )
 
     return obj

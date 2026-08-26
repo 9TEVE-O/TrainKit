@@ -1,6 +1,7 @@
 """Tests for trainkit.cli — CLI commands."""
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,13 @@ from trainkit.cli import main
 
 @pytest.fixture()
 def runner():
-    return CliRunner(mix_stderr=False)
+    # Click >= 8.2 always keeps stderr separate and removed the constructor
+    # argument; older releases need it passed explicitly. Tests read
+    # result.stdout, which is the stdout-only stream on both.
+    try:
+        return CliRunner(mix_stderr=False)
+    except TypeError:
+        return CliRunner()
 
 
 @pytest.fixture()
@@ -51,7 +58,7 @@ class TestRunCommand:
             ["run", "--script", str(eval_script), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0, result.output
-        summary = json.loads(result.output)
+        summary = json.loads(result.stdout)
         assert summary["exit_code"] == 0
         assert "accuracy" in summary["metrics"]
 
@@ -83,12 +90,87 @@ class TestRunCommand:
         )
         assert result.exit_code == 1
 
+    def test_run_threshold_on_absent_metric_fails(self, runner, eval_script, tmp_path):
+        # The script emits accuracy and loss but never precision. A gate on a
+        # metric that never appeared must fail, not pass with a warning.
+        result = runner.invoke(
+            main,
+            ["run", "--script", str(eval_script),
+             "--threshold", "precision:0.5", "--output-dir", str(tmp_path)],
+        )
+        assert result.exit_code == 1
+        assert "precision" in result.stderr
+
+    def test_run_threshold_enforced_when_no_results(
+        self, runner, bad_output_script, tmp_path
+    ):
+        # No parseable metric rows at all: the gate must still fail rather than
+        # pass because nothing was measured.
+        result = runner.invoke(
+            main,
+            ["run", "--script", str(bad_output_script),
+             "--threshold", "accuracy:0.5", "--output-dir", str(tmp_path)],
+        )
+        assert result.exit_code == 1
+
+    def test_repeated_runs_do_not_overwrite_artefacts(
+        self, runner, eval_script, tmp_path, monkeypatch
+    ):
+        # Two runs of the same script in the same second previously collided on
+        # the run ID and the second silently overwrote the first. Freeze the
+        # clock so the collision is guaranteed rather than timing-dependent.
+        frozen = datetime(2026, 3, 4, 14, 23, 0, tzinfo=timezone.utc)
+
+        class FrozenDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return frozen
+
+        monkeypatch.setattr("trainkit.cli.datetime", FrozenDatetime)
+
+        first = runner.invoke(
+            main, ["run", "--script", str(eval_script), "--output-dir", str(tmp_path)]
+        )
+        second = runner.invoke(
+            main, ["run", "--script", str(eval_script), "--output-dir", str(tmp_path)]
+        )
+        assert first.exit_code == 0, first.output
+        assert second.exit_code == 0, second.output
+
+        id_a = json.loads(first.stdout)["run_id"]
+        id_b = json.loads(second.stdout)["run_id"]
+        assert id_a != id_b
+        assert (tmp_path / id_a / "summary.json").exists()
+        assert (tmp_path / id_b / "summary.json").exists()
+
     def test_run_failing_script_exit_code_2(self, runner, failing_script, tmp_path):
         result = runner.invoke(
             main,
             ["run", "--script", str(failing_script), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 2
+
+    def test_failed_run_leaves_no_orphan_reservation(
+        self, runner, tmp_path, monkeypatch
+    ):
+        # reserve_run_id claims the directory before the script runs, so a run
+        # that aborts before writing must release it rather than leaving an
+        # empty directory to consume the ID.
+        frozen = datetime(2026, 3, 4, 14, 23, 0, tzinfo=timezone.utc)
+
+        class FrozenDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return frozen
+
+        monkeypatch.setattr("trainkit.cli.datetime", FrozenDatetime)
+
+        result = runner.invoke(
+            main,
+            ["run", "--script", str(tmp_path / "nope.py"), "--output-dir", str(tmp_path)],
+        )
+        assert result.exit_code == 2
+        assert [p.name for p in tmp_path.iterdir() if p.is_dir()] == []
 
     def test_run_bad_output_non_strict(self, runner, bad_output_script, tmp_path):
         result = runner.invoke(
@@ -131,7 +213,7 @@ class TestRunCommand:
             main,
             ["run", "--script", str(eval_script), "--output-dir", str(tmp_path)],
         )
-        summary = json.loads(result.output)
+        summary = json.loads(result.stdout)
         assert summary["model_hash"] is not None
         assert summary["model_hash"].startswith("sha256:")
 
@@ -143,7 +225,7 @@ class TestRunCommand:
              "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0, result.output
-        summary = json.loads(result.output)
+        summary = json.loads(result.stdout)
         assert summary["model_hash"] is None
 
 
@@ -151,7 +233,7 @@ class TestListCommand:
     def test_list_empty(self, runner, tmp_path):
         result = runner.invoke(main, ["list", "--output-dir", str(tmp_path)])
         assert result.exit_code == 0
-        assert "No runs found" in result.output
+        assert "No runs found" in result.stdout
 
     def test_list_shows_runs(self, runner, eval_script, tmp_path):
         runner.invoke(
@@ -159,7 +241,7 @@ class TestListCommand:
         )
         result = runner.invoke(main, ["list", "--output-dir", str(tmp_path)])
         assert result.exit_code == 0
-        assert "[0]" in result.output
+        assert "[0]" in result.stdout
 
 
 class TestShowCommand:
@@ -169,7 +251,7 @@ class TestShowCommand:
         )
         result = runner.invoke(main, ["show", "--output-dir", str(tmp_path)])
         assert result.exit_code == 0
-        summary = json.loads(result.output)
+        summary = json.loads(result.stdout)
         assert "run_id" in summary
 
     def test_show_no_runs(self, runner, tmp_path):
@@ -195,7 +277,7 @@ class TestDiffCommand:
             main, ["diff", "0", "1", "--output-dir", str(tmp_path)]
         )
         assert result.exit_code == 0
-        diff = json.loads(result.output)
+        diff = json.loads(result.stdout)
         assert "deltas" in diff
 
     def test_diff_invalid_selector(self, runner, tmp_path):
@@ -212,7 +294,7 @@ class TestCleanCommand:
         )
         runner.invoke(main, ["clean", "0", "--output-dir", str(tmp_path)])
         result = runner.invoke(main, ["list", "--output-dir", str(tmp_path)])
-        assert "No runs found" in result.output
+        assert "No runs found" in result.stdout
 
     def test_clean_older_than(self, runner, eval_script, tmp_path):
         runner.invoke(
@@ -225,7 +307,7 @@ class TestCleanCommand:
             main, ["clean", "--older-than", "9999d", "--output-dir", str(tmp_path)]
         )
         assert result.exit_code == 0
-        assert "No runs matched" in result.output
+        assert "No runs matched" in result.stdout
 
     def test_clean_bad_duration(self, runner, tmp_path):
         result = runner.invoke(
