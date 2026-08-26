@@ -150,6 +150,28 @@ class TestRunCommand:
         )
         assert result.exit_code == 2
 
+    def test_failed_run_leaves_no_orphan_reservation(
+        self, runner, tmp_path, monkeypatch
+    ):
+        # reserve_run_id claims the directory before the script runs, so a run
+        # that aborts before writing must release it rather than leaving an
+        # empty directory to consume the ID.
+        frozen = datetime(2026, 3, 4, 14, 23, 0, tzinfo=timezone.utc)
+
+        class FrozenDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return frozen
+
+        monkeypatch.setattr("trainkit.cli.datetime", FrozenDatetime)
+
+        result = runner.invoke(
+            main,
+            ["run", "--script", str(tmp_path / "nope.py"), "--output-dir", str(tmp_path)],
+        )
+        assert result.exit_code == 2
+        assert [p.name for p in tmp_path.iterdir() if p.is_dir()] == []
+
     def test_run_bad_output_non_strict(self, runner, bad_output_script, tmp_path):
         result = runner.invoke(
             main,

@@ -13,10 +13,11 @@ import click
 from trainkit import __version__
 from trainkit.artifacts import (
     DEFAULT_ARTEFACT_DIR,
-    allocate_run_id,
     build_summary,
+    discard_run_id,
     list_runs,
     load_summary,
+    reserve_run_id,
     resolve_run_id,
     run_dir,
     write_run,
@@ -86,7 +87,7 @@ def run_cmd(
     seed = script or command or ""
     pre_start = datetime.now(tz=timezone.utc)
     base = Path(output_dir)
-    run_id = allocate_run_id(pre_start, seed, base)
+    run_id = reserve_run_id(pre_start, seed, base)
 
     emit_run_started(run_id, script=script, command=command)
 
@@ -108,6 +109,7 @@ def run_cmd(
             thresholds=parsed_thresholds,
         )
     except FileNotFoundError as exc:
+        discard_run_id(run_id, base)
         click.echo(f"Error: {exc}", err=True)
         sys.exit(EXIT_ERROR)
 
@@ -141,8 +143,8 @@ def run_cmd(
         )
     except FileExistsError:
         click.echo(
-            f"Error: run directory for {run_id!r} already exists; "
-            f"refusing to overwrite existing artefacts",
+            f"Error: run directory for {run_id!r} already contains artefacts; "
+            f"refusing to overwrite them",
             err=True,
         )
         sys.exit(EXIT_ERROR)

@@ -6,8 +6,9 @@ from pathlib import Path
 import pytest
 
 from trainkit.artifacts import (
-    allocate_run_id,
+    discard_run_id,
     build_summary,
+    reserve_run_id,
     list_runs,
     load_summary,
     make_run_id,
@@ -39,30 +40,94 @@ class TestMakeRunId:
         assert make_run_id(ts, "eval_a.py") != make_run_id(ts, "eval_b.py")
 
 
-class TestAllocateRunId:
+class TestReserveRunId:
     def test_returns_base_id_when_free(self, tmp_path):
         ts = datetime(2026, 3, 4, 14, 23, 0, tzinfo=timezone.utc)
-        assert allocate_run_id(ts, "eval.py", tmp_path) == make_run_id(ts, "eval.py")
+        assert reserve_run_id(ts, "eval.py", tmp_path) == make_run_id(ts, "eval.py")
+
+    def test_reservation_is_atomic(self, tmp_path):
+        # The whole point: reserving must claim the directory immediately, so a
+        # second reservation taken before the first has written anything still
+        # gets a distinct ID. A check-then-act allocator returns the same ID here.
+        ts = datetime(2026, 3, 4, 14, 23, 0, tzinfo=timezone.utc)
+        first = reserve_run_id(ts, "eval.py", tmp_path)
+        second = reserve_run_id(ts, "eval.py", tmp_path)
+        assert first != second
+        assert (tmp_path / first).is_dir()
+        assert (tmp_path / second).is_dir()
 
     def test_disambiguates_same_second_same_seed(self, tmp_path):
         ts = datetime(2026, 3, 4, 14, 23, 0, tzinfo=timezone.utc)
-        first = allocate_run_id(ts, "eval.py", tmp_path)
-        (tmp_path / first).mkdir(parents=True)
-
-        second = allocate_run_id(ts, "eval.py", tmp_path)
-        assert second != first
-        assert second == f"{first}-2"
-        (tmp_path / second).mkdir(parents=True)
-
-        assert allocate_run_id(ts, "eval.py", tmp_path) == f"{first}-3"
+        first = reserve_run_id(ts, "eval.py", tmp_path)
+        second = reserve_run_id(ts, "eval.py", tmp_path)
+        assert second == f"{first}-002"
+        assert reserve_run_id(ts, "eval.py", tmp_path) == f"{first}-003"
 
     def test_disambiguated_id_keeps_timestamp_prefix(self, tmp_path):
         ts = datetime(2026, 3, 4, 14, 23, 0, tzinfo=timezone.utc)
-        first = allocate_run_id(ts, "eval.py", tmp_path)
-        (tmp_path / first).mkdir(parents=True)
-        second = allocate_run_id(ts, "eval.py", tmp_path)
+        reserve_run_id(ts, "eval.py", tmp_path)
+        second = reserve_run_id(ts, "eval.py", tmp_path)
         # Selection by timestamp prefix must still find both runs.
         assert second.startswith("20260304T142300Z_")
+
+
+class TestRunOrdering:
+    def _write(self, tmp_path, run_id, ts):
+        summary = build_summary(
+            run_id=run_id, timestamp=ts, script="eval.py", command=None,
+            model_hash=None, exit_code=0, duration_seconds=1.0,
+            results=SAMPLE_RESULTS, warnings=[],
+        )
+        write_run(
+            run_id=run_id, results=SAMPLE_RESULTS, summary=summary,
+            stdout_text="", stderr_text="", base=tmp_path,
+        )
+
+    def test_many_runs_in_one_second_stay_chronological(self, tmp_path):
+        # End-to-end: twelve runs of one target inside a single second must
+        # list in creation order and resolve correctly by index.
+        ts = datetime(2026, 3, 4, 14, 23, 0, tzinfo=timezone.utc)
+        created = []
+        for _ in range(12):
+            run_id = reserve_run_id(ts, "eval.py", tmp_path)
+            self._write(tmp_path, run_id, ts)
+            created.append(run_id)
+
+        assert list_runs(tmp_path) == created
+        assert resolve_run_id("-1", tmp_path) == created[-1]
+        assert resolve_run_id("0", tmp_path) == created[0]
+
+    def test_ordering_survives_discriminator_width_change(self, tmp_path):
+        # Zero-padding keeps IDs lexicographically sortable only while the
+        # discriminator stays three digits. Past 999 the width grows and plain
+        # string sorting puts "-1000" before "-999"; ordering must not depend
+        # on that. Directories are created directly to reach the boundary
+        # without a thousand reservations.
+        ts = datetime(2026, 3, 4, 14, 23, 0, tzinfo=timezone.utc)
+        stem = make_run_id(ts, "eval.py")
+        expected = [stem, f"{stem}-002", f"{stem}-999", f"{stem}-1000"]
+
+        for run_id in reversed(expected):  # create out of order on purpose
+            self._write(tmp_path, run_id, ts)
+
+        assert list_runs(tmp_path) == expected
+        assert resolve_run_id("-1", tmp_path) == f"{stem}-1000"
+
+class TestDiscardRunId:
+    def test_removes_empty_reservation(self, tmp_path):
+        ts = datetime(2026, 3, 4, 14, 23, 0, tzinfo=timezone.utc)
+        run_id = reserve_run_id(ts, "eval.py", tmp_path)
+        discard_run_id(run_id, tmp_path)
+        assert not (tmp_path / run_id).exists()
+        # The freed slot is reusable.
+        assert reserve_run_id(ts, "eval.py", tmp_path) == run_id
+
+    def test_never_removes_a_directory_holding_artefacts(self, tmp_path):
+        ts = datetime(2026, 3, 4, 14, 23, 0, tzinfo=timezone.utc)
+        run_id = reserve_run_id(ts, "eval.py", tmp_path)
+        (tmp_path / run_id / "summary.json").write_text("{}")
+        discard_run_id(run_id, tmp_path)
+        assert (tmp_path / run_id / "summary.json").exists()
 
 
 class TestWriteAndLoadRun:

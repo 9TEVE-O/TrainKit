@@ -129,8 +129,9 @@ TrainKit recognises and validates the following metric names out of the box:
 | `rouge` | [0.0, 1.0] | |
 
 **Boundary conditions:**
-- Empty string for a required field → parse error; run fails with exit code `2`.
-- Type mismatch for `value` (e.g. string instead of number) → parse error; run fails with exit code `2`.
+- Empty string for a required field → parse error; the line is skipped with a warning, or the run fails with exit code `2` under `--strict`.
+- Type mismatch for `value` (e.g. string instead of number) → parse error; same handling as above.
+- Non-finite `value` (`NaN`, `Infinity`) → parse error; same handling as above.
 
 ### Custom metrics
 
@@ -251,10 +252,12 @@ Example: `20260304T142300Z_e3b0c442`
 
 The suffix is derived from the script path or command string, so the same
 target evaluated twice in the same second would otherwise produce the same
-directory name. When that happens a numeric discriminator is appended
-(`20260304T142300Z_e3b0c442-2`, `-3`, ...) so no run overwrites another. The
-timestamp portion is unchanged, so selection by timestamp prefix still matches
-every run started in that second.
+directory name. When that happens a zero-padded discriminator is appended
+(`20260304T142300Z_e3b0c442-002`, `-003`, ...) so no run overwrites another.
+The directory is claimed when the run starts, not when it finishes, so
+concurrent runs of the same target get distinct IDs. The timestamp portion is
+unchanged, so selection by timestamp prefix still matches every run started in
+that second.
 
 ### Metadata fields (`summary.json`)
 
@@ -335,7 +338,7 @@ trainkit clean --older-than 7d
 | Language | Python 3.9+ | Ubiquitous in ML; matches user environment |
 | CLI framework | `click` | Mature; composable; good error messages |
 | Output format | JSONL | Streamable; grep-friendly; no schema lock-in |
-| Packaging | `pyproject.toml` + `hatch` | Modern Python packaging standard |
+| Packaging | `pyproject.toml` + `hatchling` | Modern Python packaging standard |
 | Testing | `pytest` | Standard Python test runner |
 | Hashing | `hashlib` (stdlib) | No extra dependencies for SHA-256 |
 
@@ -351,7 +354,7 @@ trainkit clean --older-than 7d
 - `trainkit list` and `trainkit show`
 
 ### v0.2 — Diff and thresholds
-- `trainkit diff` with index and timestamp selection
+- `trainkit diff` with index and run ID prefix selection
 - `--threshold` option
 - `trainkit clean`
 - Windows support assessment
