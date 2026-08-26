@@ -54,6 +54,30 @@ def run_dir(run_id: str, base: Path = DEFAULT_ARTEFACT_DIR) -> Path:
     return base / run_id
 
 
+def allocate_run_id(
+    timestamp: datetime, seed: str, base: Path = DEFAULT_ARTEFACT_DIR
+) -> str:
+    """Return a run ID that does not yet exist under ``base``.
+
+    ``make_run_id`` is deterministic: the same seed evaluated twice within the
+    same second produces the same ID. Without disambiguation the second run
+    would reuse the first run's directory and overwrite its artefacts. When the
+    base ID is already taken, a numeric discriminator is appended
+    (``<run_id>-2``, ``<run_id>-3``, ...) so each run keeps its own artefacts.
+
+    The timestamp portion is left untouched, so run selection by timestamp
+    prefix continues to match every run started in that second.
+    """
+    run_id = make_run_id(timestamp, seed)
+    if not run_dir(run_id, base).exists():
+        return run_id
+
+    counter = 2
+    while run_dir(f"{run_id}-{counter}", base).exists():
+        counter += 1
+    return f"{run_id}-{counter}"
+
+
 def write_run(
     *,
     run_id: str,
@@ -86,7 +110,10 @@ def write_run(
         The run directory that was created.
     """
     directory = run_dir(run_id, base)
-    directory.mkdir(parents=True, exist_ok=True)
+    # exist_ok=False: a collision here means two runs claimed the same ID and
+    # the second would overwrite the first's artefacts. Fail loudly instead.
+    # Callers should obtain IDs from allocate_run_id to avoid this.
+    directory.mkdir(parents=True, exist_ok=False)
 
     results_path = directory / "results.jsonl"
     with results_path.open("w", encoding="utf-8") as fh:
@@ -231,8 +258,8 @@ def resolve_run_id(selector: str, base: Path = DEFAULT_ARTEFACT_DIR) -> str:
     Parameters
     ----------
     selector:
-        An integer index (e.g. ``"0"``, ``"-1"``) or a full ISO 8601
-        timestamp prefix matching a run ID.
+        An integer index (e.g. ``"0"``, ``"-1"``) or a prefix of a run ID
+        (e.g. the compact timestamp ``"20260304T142300Z"``).
     base:
         Base artefact directory.
 

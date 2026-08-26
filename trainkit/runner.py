@@ -151,19 +151,25 @@ def run_evaluation(
 
         results.append(row)
 
-    # Threshold enforcement
+    # Threshold enforcement.
+    #
+    # Runs unconditionally when thresholds are configured, including when no
+    # results were parsed at all: a gate that silently passes because nothing
+    # was measured is worse than no gate. A threshold naming a metric that
+    # never appeared is a breach, not a warning, for the same reason.
     exit_code = EXIT_OK
-    if thresholds and results:
+    if thresholds:
         metric_values: dict[str, list[float]] = {}
         for row in results:
             metric_values.setdefault(row["metric"], []).append(float(row["value"]))
 
         for metric, minimum in thresholds.items():
             vals = metric_values.get(metric)
-            if vals is None:
+            if not vals:
                 warnings.append(
-                    f"WARNING — Threshold set for {metric!r} but no values found"
+                    f"Threshold breach: {metric!r} has no values in this run"
                 )
+                exit_code = EXIT_THRESHOLD
                 continue
             mean_val = sum(vals) / len(vals)
             if mean_val < minimum:

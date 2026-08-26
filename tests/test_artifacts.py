@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from trainkit.artifacts import (
+    allocate_run_id,
     build_summary,
     list_runs,
     load_summary,
@@ -38,6 +39,32 @@ class TestMakeRunId:
         assert make_run_id(ts, "eval_a.py") != make_run_id(ts, "eval_b.py")
 
 
+class TestAllocateRunId:
+    def test_returns_base_id_when_free(self, tmp_path):
+        ts = datetime(2026, 3, 4, 14, 23, 0, tzinfo=timezone.utc)
+        assert allocate_run_id(ts, "eval.py", tmp_path) == make_run_id(ts, "eval.py")
+
+    def test_disambiguates_same_second_same_seed(self, tmp_path):
+        ts = datetime(2026, 3, 4, 14, 23, 0, tzinfo=timezone.utc)
+        first = allocate_run_id(ts, "eval.py", tmp_path)
+        (tmp_path / first).mkdir(parents=True)
+
+        second = allocate_run_id(ts, "eval.py", tmp_path)
+        assert second != first
+        assert second == f"{first}-2"
+        (tmp_path / second).mkdir(parents=True)
+
+        assert allocate_run_id(ts, "eval.py", tmp_path) == f"{first}-3"
+
+    def test_disambiguated_id_keeps_timestamp_prefix(self, tmp_path):
+        ts = datetime(2026, 3, 4, 14, 23, 0, tzinfo=timezone.utc)
+        first = allocate_run_id(ts, "eval.py", tmp_path)
+        (tmp_path / first).mkdir(parents=True)
+        second = allocate_run_id(ts, "eval.py", tmp_path)
+        # Selection by timestamp prefix must still find both runs.
+        assert second.startswith("20260304T142300Z_")
+
+
 class TestWriteAndLoadRun:
     def test_write_creates_files(self, tmp_path):
         ts = datetime(2026, 3, 4, 14, 23, 0, tzinfo=timezone.utc)
@@ -65,6 +92,27 @@ class TestWriteAndLoadRun:
         assert (directory / "summary.json").exists()
         assert (directory / "stdout.log").exists()
         assert (directory / "stderr.log").exists()
+
+    def test_write_refuses_to_overwrite_existing_run(self, tmp_path):
+        ts = datetime(2026, 3, 4, 14, 23, 0, tzinfo=timezone.utc)
+        run_id = make_run_id(ts, "eval.py")
+        summary = build_summary(
+            run_id=run_id, timestamp=ts, script="eval.py", command=None,
+            model_hash=None, exit_code=0, duration_seconds=1.0,
+            results=SAMPLE_RESULTS, warnings=[],
+        )
+        kwargs = dict(
+            run_id=run_id, summary=summary,
+            stdout_text="", stderr_text="", base=tmp_path,
+        )
+        write_run(results=SAMPLE_RESULTS, **kwargs)
+
+        # Reusing an ID must not silently clobber the first run's artefacts.
+        with pytest.raises(FileExistsError):
+            write_run(results=[], **kwargs)
+
+        lines = (tmp_path / run_id / "results.jsonl").read_text().strip().splitlines()
+        assert len(lines) == 3
 
     def test_results_jsonl_content(self, tmp_path):
         ts = datetime(2026, 3, 4, 14, 23, 0, tzinfo=timezone.utc)
