@@ -14,9 +14,10 @@ from trainkit import __version__
 from trainkit.artifacts import (
     DEFAULT_ARTEFACT_DIR,
     build_summary,
+    discard_run_id,
     list_runs,
     load_summary,
-    make_run_id,
+    reserve_run_id,
     resolve_run_id,
     run_dir,
     write_run,
@@ -86,8 +87,8 @@ def run_cmd(
 
     seed = script or command or ""
     pre_start = datetime.now(tz=timezone.utc)
-    run_id = make_run_id(pre_start, seed)
     base = Path(output_dir)
+    run_id = reserve_run_id(pre_start, seed, base)
 
     emit_run_started(run_id, script=script, command=command)
 
@@ -109,6 +110,7 @@ def run_cmd(
             thresholds=parsed_thresholds,
         )
     except FileNotFoundError as exc:
+        discard_run_id(run_id, base)
         click.echo(f"Error: {exc}", err=True)
         sys.exit(EXIT_ERROR)
 
@@ -131,14 +133,22 @@ def run_cmd(
 
     emit_precommit(run_id, description="write run artefacts to disk")
 
-    directory = write_run(
-        run_id=run_id,
-        results=results,
-        summary=summary,
-        stdout_text=stdout_text,
-        stderr_text=stderr_text,
-        base=base,
-    )
+    try:
+        directory = write_run(
+            run_id=run_id,
+            results=results,
+            summary=summary,
+            stdout_text=stdout_text,
+            stderr_text=stderr_text,
+            base=base,
+        )
+    except FileExistsError:
+        click.echo(
+            f"Error: run directory for {run_id!r} already contains artefacts; "
+            f"refusing to overwrite them",
+            err=True,
+        )
+        sys.exit(EXIT_ERROR)
 
     for warning in warnings:
         click.echo(warning, err=True)

@@ -4,6 +4,7 @@
 **Prepared by:** Subzteveø
 **Date:** March 2026
 **Status:** Ready for development
+**Repository:** github.com/9TEVE-O/TrainKit
 
 ---
 

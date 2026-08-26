@@ -54,6 +54,54 @@ def run_dir(run_id: str, base: Path = DEFAULT_ARTEFACT_DIR) -> Path:
     return base / run_id
 
 
+def reserve_run_id(
+    timestamp: datetime, seed: str, base: Path = DEFAULT_ARTEFACT_DIR
+) -> str:
+    """Atomically claim an unused run directory and return its ID.
+
+    ``make_run_id`` is deterministic: the same seed evaluated twice within the
+    same second produces the same ID. Without disambiguation the second run
+    would reuse the first run's directory and overwrite its artefacts. When the
+    base ID is already taken, a discriminator is appended (``<run_id>-002``,
+    ``<run_id>-003``, ...) so each run keeps its own artefacts.
+
+    The claim is the ``mkdir`` itself rather than an existence check followed by
+    a later write. Evaluation can take minutes, so a check-then-act would let
+    two concurrent runs pass the same check and only collide at write time,
+    by which point the loser has already spent its work. Here the filesystem
+    picks the winner and the loser immediately tries the next discriminator.
+
+    The directory is created empty; ``write_run`` fills it. A caller that
+    aborts before writing should remove it (see ``discard_run_id``).
+
+    The timestamp portion is left untouched, so run selection by timestamp
+    prefix continues to match every run started in that second.
+    """
+    run_id = make_run_id(timestamp, seed)
+    counter = 1
+    while True:
+        candidate = run_id if counter == 1 else f"{run_id}-{counter:03d}"
+        try:
+            run_dir(candidate, base).mkdir(parents=True, exist_ok=False)
+            return candidate
+        except FileExistsError:
+            counter += 1
+
+
+def discard_run_id(run_id: str, base: Path = DEFAULT_ARTEFACT_DIR) -> None:
+    """Release a reservation made by ``reserve_run_id`` that was never written.
+
+    Removes the directory only while it is still empty, so a directory that
+    already holds artefacts is never destroyed by a cleanup path.
+    """
+    directory = run_dir(run_id, base)
+    try:
+        directory.rmdir()
+    except OSError:
+        # Non-empty (it holds artefacts) or already gone. Either way, leave it.
+        pass
+
+
 def write_run(
     *,
     run_id: str,
@@ -86,7 +134,14 @@ def write_run(
         The run directory that was created.
     """
     directory = run_dir(run_id, base)
+    # The directory may already exist because reserve_run_id created it, so the
+    # guard is emptiness rather than absence: an ID whose directory already
+    # holds artefacts belongs to another run, and writing would destroy it.
     directory.mkdir(parents=True, exist_ok=True)
+    if any(directory.iterdir()):
+        raise FileExistsError(
+            f"Run directory {directory} already contains artefacts"
+        )
 
     results_path = directory / "results.jsonl"
     with results_path.open("w", encoding="utf-8") as fh:
@@ -178,6 +233,20 @@ def build_summary(
     }
 
 
+def _run_sort_key(run_id: str) -> tuple[str, int]:
+    """Sort key placing a run's discriminated siblings in creation order.
+
+    Run IDs sort chronologically as plain strings because the timestamp leads
+    and is fixed-width, but the collision discriminator must be compared as a
+    number: as text ``-010`` precedes ``-002``, which would make ``list_runs``
+    non-chronological and let a selector like ``-1`` resolve to the wrong run.
+    """
+    stem, sep, suffix = run_id.rpartition("-")
+    if sep and suffix.isdigit():
+        return (stem, int(suffix))
+    return (run_id, 1)
+
+
 def list_runs(base: Path = DEFAULT_ARTEFACT_DIR) -> list[str]:
     """Return sorted list of run IDs in the artefact directory (oldest first).
 
@@ -194,7 +263,8 @@ def list_runs(base: Path = DEFAULT_ARTEFACT_DIR) -> list[str]:
     if not base.exists():
         return []
     return sorted(
-        d.name for d in base.iterdir() if d.is_dir() and (d / "summary.json").exists()
+        (d.name for d in base.iterdir() if d.is_dir() and (d / "summary.json").exists()),
+        key=_run_sort_key,
     )
 
 
@@ -226,13 +296,13 @@ def load_summary(run_id: str, base: Path = DEFAULT_ARTEFACT_DIR) -> dict[str, An
 
 
 def resolve_run_id(selector: str, base: Path = DEFAULT_ARTEFACT_DIR) -> str:
-    """Resolve a run selector (index or full timestamp) to a run ID.
+    """Resolve a run selector (index or run ID prefix) to a run ID.
 
     Parameters
     ----------
     selector:
-        An integer index (e.g. ``"0"``, ``"-1"``) or a full ISO 8601
-        timestamp prefix matching a run ID.
+        An integer index (e.g. ``"0"``, ``"-1"``) or a prefix of a run ID
+        (e.g. the compact timestamp ``"20260304T142300Z"``).
     base:
         Base artefact directory.
 

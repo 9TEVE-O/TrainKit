@@ -35,6 +35,15 @@ class TestParseResultLine:
         with pytest.raises(ParseError, match="JSON object"):
             parse_result_line("[1, 2, 3]")
 
+    @pytest.mark.parametrize("literal", ["NaN", "Infinity", "-Infinity"])
+    def test_non_finite_value_rejected(self, literal):
+        # json.loads accepts these as floats; they must not reach results,
+        # where they would defeat range checks and threshold comparisons.
+        with pytest.raises(ParseError, match="finite number"):
+            parse_result_line(
+                '{"id": "s1", "metric": "accuracy", "value": %s}' % literal
+            )
+
     def test_missing_id(self):
         with pytest.raises(MissingFieldError, match="'id'"):
             parse_result_line('{"metric": "accuracy", "value": 0.9}')
